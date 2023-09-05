@@ -1,108 +1,61 @@
-import Buffer "mo:base/Buffer";
-import Result "mo:base/Result";
+import RBTree "mo:base/RBTree";
+import Nat "mo:base/Nat";
+import Text "mo:base/Text";
 import Iter "mo:base/Iter";
+import Int "mo:base/Int";
+import Char "mo:base/Char";
+import Nat32 "mo:base/Nat32";
+import Option "mo:base/Option";
 
-actor Election {
-  // type Buffer = Buffer.Buffer;
-  type Result = Result.Result<(), Text>;
 
-  type Person = {
-    email : Text;
-  };
+actor {
+  let psk : Text = "theorywillonlytakeyousofar";
 
-  // can create separate types later eg. email : Email; type Email = Text;
-  type Candidate = {
-    email : Text;
-    name : Text;
-    speech : Text;
-    var votes : Nat;
-  };
+  var question : Text = "Who will sit on the throne?";
+  var votes : RBTree.RBTree<Text, Nat> = RBTree.RBTree(Text.compare);
 
-  type Voter = {
-    email : Text;
-    hasVoted : Bool;
-  };
-
-  func personExistsElectionPool(e : Text) : Bool {
-    for(p in electionPool.vals()) {
-      if (p.email == e) return true;
+  func textToNat(t : Text) : Nat {
+    var n : Nat = 0;
+    for (c in t.chars()) {
+      if (Char.isDigit(c)) {
+        let charAsNat : Nat = Nat32.toNat(Char.toNat32(c) - 48);
+        n := n * 10 + charAsNat;
+      }
     };
-    return false;
+    return n;
   };
 
-  func personExistsCandidates(e : Text) : Bool {
-    for(p in candidates.vals()) {
-      if (p.email == e) return true;
-    };
-    return false;
+  public query func getQuestion() : async Text {
+    question;
   };
 
-  func personExistsVoters(e : Text) : Bool {
-    for(p in voters.vals()) {
-      if (p.email == e) return true;
-    };
-    return false;
+  public query func getVotes() : async [(Text, Nat)] {
+    Iter.toArray(votes.entries());
   };
 
-  func addPerson(e : Text) : Result {
-    if (personExistsElectionPool(e)) {#err("Person already in election pool");}
-    else {
-      var person : Person = {email = e};
-      electionPool.add(person);
-      #ok();
-    };
+  public func addCandidate(entry : Text) : async [(Text, Nat)] {
+    votes.put(entry, 0);
+    Iter.toArray(votes.entries());
   };
 
-  var candidates = Buffer.Buffer<Candidate>(5);
-  var electionPool = Buffer.Buffer<Person>(5); // This is already filled, no one outside this list can vote, this should be branch specififc
-  var voters = Buffer.Buffer<Voter>(5); //We could somehow combine this and electio pool + candidates too but let's figure that out later
-  var a = addPerson("arnav@mail");
-  var b = addPerson("chetan@mail");
-  var c = addPerson("ekas@mail");
-  var d = addPerson("ayush@mail");
-  var e = addPerson("vanya@mail");
+  public func vote(entry : Text) : async [(Text, Nat)] {
+    let votes_for_entry : ?Nat = votes.get(entry);
 
-  public func addCandidate(e : Text, n : Text, s : Text) : async Text {
-    // instead of () Result can be used too
-    func checkValidityAndAdd() : Result {
-      if (not personExistsElectionPool(e)) {#err("Person not in election pool");}
-      else if (personExistsCandidates(e)) {#err("Person is already registered as a candidate");}
-      else {
-        var c : Candidate = {email = e; name = n; speech = s; var votes = 0};
-        candidates.add(c);
-        #ok();
-      };
+    let current_votes_for_entry : Int = switch votes_for_entry {
+      case null -1;
+      case (?Nat) Nat;
     };
 
-    let result = checkValidityAndAdd();
-    switch(result) {
-      case(#ok()) {return "Candidate successfully added!"};
-      case(#err(error)) {return error};
-    };
-  };
-
-  public func vote(voterMail : Text, candidateMail : Text) : async Text {
-      if (not personExistsElectionPool(voterMail)) {return "Person not in election pool";}
-      else if (personExistsVoters(voterMail)) {return "Person has already voted";}
-      else if (personExistsCandidates(voterMail)) {return "The person is an existing candidate";}
-      else {
-        for(c in candidates.vals()) {
-          if (c.email == candidateMail) {
-            c.votes += 1;
-            var v : Voter = {email = voterMail; hasVoted = true};
-            voters.add(v);
-          }
-        };
-        // return "No such candidate found";
-        return "Vote cast";
-      };
+    if (current_votes_for_entry != -1) {
+      let current_votes_for_entry_nat : Nat = textToNat(Int.toText(current_votes_for_entry));
+      votes.put(entry, current_votes_for_entry_nat + 1);
     };
 
-  public query func showResult() : async [(Text, Nat)] {
-    var resultList = Buffer.Buffer<(Text, Nat)>(5);
-    for(c in candidates.vals()) {
-      resultList.add((c.name, c.votes));
-    };
-    Buffer.toArray(resultList);
+    Iter.toArray(votes.entries());
   };
+
+  public func resetVotes(passkey : Text) : async () {
+    if (passkey == psk) votes := RBTree.RBTree(Text.compare);
+  };
+
 };
